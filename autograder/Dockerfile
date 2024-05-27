@@ -1,12 +1,16 @@
-ARG BASE_REPO=gradescope/autograder-base
-ARG TAG=latest
+FROM gradescope/autograder-base:latest
 
-FROM ${BASE_REPO}:${TAG}
+COPY src /autograder/source/src
+COPY tutorial/keys /autograder/source/keys
 
-ADD source /autograder/source
+RUN apt update \
+    && apt install -y libssl-dev \
+    && apt install -y seccomp \
+    && cd /autograder/source/src \
+    && make \
+    && adduser student --no-create-home --disabled-password --gecos "" \
+    && chmod o= /autograder/source/src
 
-COPY . /autograder/source
-COPY /autograder/source/run_autograder /autograder/source
-RUN chmod +x /autograder/run_autograder
-
-RUN apt install 
+COPY autograder/run_autograder /autograder
+COPY autograder /autograder/source
+RUN pip install -r /autograder/source/requirements.txt

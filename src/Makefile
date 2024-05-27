@@ -6,15 +6,15 @@ all: clean build
 
 default: build
 
-build: server.c client.c
+build: server.c client.c transport.c security.c
 	${CC} ${CFLAGS} -o server server.c transport.c security.c
 	${CC} ${CFLAGS} -o client client.c transport.c security.c
 
 clean:
-	rm -rf server client server.txt client.txt 
+	rm -rf server client
 
 zip: clean
-	rm project2.zip
+	rm -f project2.zip
 	mkdir -p project
 	cp consts.h security.h transport.h server.c client.c security.c transport.c Makefile project
 	zip project2.zip project/*

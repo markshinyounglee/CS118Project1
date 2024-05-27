@@ -1,0 +1,2 @@
+gradescope-utils==0.5.0
+pyseccomp==0.1.2
