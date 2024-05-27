@@ -22,8 +22,8 @@ def prevent_network():
 
 
 if __name__ == '__main__':
-    prevent_network()
-    os.system("chmod -R o+rw /autograder/submission")
+    # prevent_network()
+    os.system("chmod -R o+rx /autograder/submission")
     suite = unittest.defaultTestLoader.discover('tests')
     with open('/autograder/results/results.json', 'w') as f:
         def post_process(json):

@@ -3,6 +3,9 @@ import subprocess
 import os
 from gradescope_utils.autograder_utils.decorators import weight, number, hide_errors
 
+failed = True
+dir = ""
+
 class TestCompilation(unittest.TestCase):
     @weight(0)
     @number(0)
@@ -28,7 +31,7 @@ class TestCompilation(unittest.TestCase):
         os.chdir(makefile_dir)
 
         try:
-            subprocess.run(['runuser', '-u', 'student', '--', 'make'], check=True, capture_output=True, text=True)
+            subprocess.run("runuser -u student -- make".split(), check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             print("We could not compile your executables. Verify that your Makefile is valid.")
             self.fail()
@@ -40,5 +43,10 @@ class TestCompilation(unittest.TestCase):
         if not os.path.isfile(os.path.join(makefile_dir, 'client')):
             print("We could not find your client executable. Make sure it's named `client`.")
             self.fail()
+
+        global dir
+        dir = makefile_dir
+        global failed
+        failed = False
 
         
