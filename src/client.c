@@ -41,6 +41,9 @@ void generate_key_exchange(server_hello* hello) {
     sec_mac = hello->comm_type ? ENCRYPT_THEN_MAC : ENCRYPTION_ONLY;
     fprintf(stderr, sec_mac ? "USE MAC\n" : "USE ENC\n");
 
+    // grading
+    if (force_sec_mac && !sec_mac) exit(12);
+
     // Verify certificate
     char* server_pub_key = hello->data;
     char* server_pub_key_sig = hello->data + ntohs(hello->key_len);
@@ -119,7 +122,10 @@ int main(int argc, char** argv) {
     if (argv[1][0] == '1') sec_flag = 1;
 
     // Not part of official spec, but just for testing
-    if (argv[5][0] == '1') sec_mac = 1;
+    if (argv[5][0] == '1') {
+        force_sec_mac = 1;
+        sec_mac = 1;
+    }
 
     /* Create sockets */
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
