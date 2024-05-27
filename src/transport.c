@@ -23,6 +23,7 @@ int force_ack = 0; // Send ACK without data
 int sec_flag = 0;
 int sec_state = INIT;
 int sec_mac = 0;
+int force_sec_mac = 0;
 
 void process_security(packet* pkt);
 size_t encrypt_data(char *data, size_t size, char *iv, char *cipher, int using_mac);

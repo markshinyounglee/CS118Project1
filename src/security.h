@@ -8,7 +8,8 @@
 extern int sec_flag; // If should use security layer
 extern int sec_state; // Current state of security FSM
 extern int sec_mac; // Should use MAC
-extern char* nonce; 
+extern int force_sec_mac;
+extern char* nonce;
 
 // libcrypto internal repr. of keys
 extern EVP_PKEY* ec_priv_key; // Local private key
