@@ -8,17 +8,51 @@
             "number": "0"
         },
         {
-            "name": "Reliable Data Transport: Small file (5 KB), no drop or delay",
-            "score": 0.0,
-            "max_score": 5,
-            "status": "failed",
-            "output": "[Errno 13] Permission denied\n",
+            "name": "Reliable Data Transport (Client): Large file (2 MB), no drop or reordering",
+            "score": 7,
+            "max_score": 7,
+            "status": "passed",
+            "number": "1.5"
+        },
+        {
+            "name": "Reliable Data Transport (Client): Medium file (200 KB), drop rate of 5%, reordering",
+            "score": 15,
+            "max_score": 15,
+            "status": "passed",
+            "number": "1.6"
+        },
+        {
+            "name": "Reliable Data Transport (Client): Small file (2 KB), no drop or reordering",
+            "score": 3,
+            "max_score": 3,
+            "status": "passed",
+            "number": "1.4"
+        },
+        {
+            "name": "Reliable Data Transport (Server): Large file (2 MB), no drop or reordering",
+            "score": 7,
+            "max_score": 7,
+            "status": "passed",
+            "number": "1.2"
+        },
+        {
+            "name": "Reliable Data Transport (Server): Medium file (200 KB), drop rate of 5%, reordering",
+            "score": 15,
+            "max_score": 15,
+            "status": "passed",
+            "number": "1.3"
+        },
+        {
+            "name": "Reliable Data Transport (Server): Small file (2 KB), no drop or reordering",
+            "score": 3,
+            "max_score": 3,
+            "status": "passed",
             "number": "1.1"
         }
     ],
     "leaderboard": [],
     "visibility": "visible",
-    "execution_time": "0.99",
-    "score": 0.0,
+    "execution_time": "40.50",
+    "score": 50,
     "test_output_format": "md"
 }

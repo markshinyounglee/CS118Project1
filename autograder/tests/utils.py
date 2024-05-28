@@ -3,54 +3,61 @@ import time
 import random
 import fcntl
 import os
-import threading
 import subprocess
+import string
 
 
-class ProcessRunner(threading.Thread):
-    def __init__(self, cmd, data, size):
+class ProcessRunner():
+    def __init__(self, cmd, data):
         super().__init__()
         self.cmd = cmd
         self.process = None
         self.stdout = b""
-        self.lock = threading.Lock()
         self.data = data
-        self.size = size
+        filename = randomword(10)
+        f = open(f'/autograder/{filename}', 'wb')
+        f.write(data)
+        os.system(f'chmod o+r /autograder/{filename}')
+        f.close()
+        self.f = open(f'/autograder/{filename}', 'rb')
 
     def run(self):
         self.process = subprocess.Popen(self.cmd.split(
-        ), stdin=self.data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
-        if not self.process.stdout:
-            self.process.terminate()
-            return
-        
-        while True:
-            output = self.process.stdout.read(1024)
-            if output:
-                with self.lock:
-                    self.stdout += output
-                    if len(self.stdout) >= self.size:
-                        break
-            else:
-                break
+        ), stdin=self.f, stdout=subprocess.PIPE, stderr=open(f'/autograder/submission/err{randomword(10)}', 'wb'), bufsize=0)
+        if self.process.stdout:
+            os.set_blocking(self.process.stdout.fileno(), False)
 
     @staticmethod
     def run_two_until_size_or_timeout(runner1, runner2, size, timeout):
-        runner1.start()
-        time.sleep(0.1)
-        runner2.start()
+        runner1.run()
+        time.sleep(0.01)
+        runner2.run()
         start_time = time.time()
+        runner1_finish = False
+        runner2_finish = False
         while time.time() - start_time < timeout:
-            with runner1.lock, runner2.lock:
-                if len(runner1.stdout) >= size and len(runner2.stdout) >= size:
-                    break
-            time.sleep(0.1)
+            output1 = runner1.process.stdout.read(2000)
+            if output1:
+                runner1.stdout += output1
+                if len(runner1.stdout) >= size:
+                    runner1_finish = True
 
-        runner1.process.terminate()
-        runner2.process.terminate()
-        runner1.join()
-        runner2.join()
+            output2 = runner2.process.stdout.read(2000)
+            if output2:
+                runner2.stdout += output2
+                if len(runner2.stdout) >= size:
+                    runner2_finish = True
 
+            if runner1_finish and runner2_finish:
+                break
+
+        runner1.process.kill()
+        runner2.process.kill()
+
+
+def randomword(length):
+    letters = string.ascii_lowercase
+    return ''.join(random.choice(letters) for i in range(length))
 
 
 def byte_diff(bytes1, bytes2):
@@ -62,35 +69,71 @@ def byte_diff(bytes1, bytes2):
     return round((differing_bytes / max_len if max_len > 0 else 1) * 100, 2)
 
 
-def proxy(client_port, server_port, loss_rate, delay):
+def proxy(client_port, server_port, loss_rate, reorder_rate):
+    random.seed(4322)
+
+    cli_serv_buffer = []
+    serv_cli_buffer = []
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     fcntl.fcntl(s, fcntl.F_SETFL, os.O_NONBLOCK)
     fcntl.fcntl(c, fcntl.F_SETFL, os.O_NONBLOCK)
     c.bind(('localhost', client_port))
     c_addr = None
+
+    last_flush = int(time.time() * 1000)
+
     while True:
         try:
             data, c_addr = c.recvfrom(4096)
-            if len(data) > 1036 or len(data) <= 0:
+            if len(data) > 2000 or len(data) <= 0:
                 continue
+
             if random.random() > loss_rate:
-                time.sleep(delay)
-                s.sendto(data, ('localhost', server_port))
+                if random.random() > reorder_rate:
+                    # send immediately
+                    s.sendto(data, ('localhost', server_port))
+                else:
+                    # store in buffer
+                    cli_serv_buffer.append(data)
+            else:
+                continue
         except BlockingIOError:
             pass
 
         try:
             data, _ = s.recvfrom(4096)
-            if len(data) > 1036 or len(data) <= 0:
+            if len(data) > 2000 or len(data) <= 0:
                 continue
             if random.random() > loss_rate:
-                time.sleep(delay)
                 if c_addr:
-                    c.sendto(data, c_addr)
+                    if random.random() > reorder_rate:
+                        c.sendto(data, c_addr)
+                    else:
+                        serv_cli_buffer.append(data)
+                else:
+                    continue
+            else:
+                continue
         except BlockingIOError:
             pass
 
+        epoch_ms = int(time.time() * 1000)
 
-# Usage
-# threading.Thread(target=proxy, args=(8081, 8080, 0.05, 0.1)).start()
+        # Flush reorder buffer if more than 300 ms
+        if len(cli_serv_buffer) > 5 or (len(cli_serv_buffer) and epoch_ms - last_flush > 300):
+            random.shuffle(cli_serv_buffer)
+            for d in cli_serv_buffer:
+                s.sendto(d, ('localhost', server_port))
+            cli_serv_buffer = []
+            last_flush = epoch_ms
+
+        if len(serv_cli_buffer) > 5 or (len(serv_cli_buffer) and epoch_ms - last_flush > 300):
+            random.shuffle(serv_cli_buffer)
+            for d in serv_cli_buffer:
+                if c_addr:
+                    c.sendto(d, c_addr)
+            serv_cli_buffer = []
+            last_flush = epoch_ms
+

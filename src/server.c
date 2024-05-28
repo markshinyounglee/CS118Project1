@@ -34,16 +34,19 @@ void generate_hello(client_hello* hello) {
     s_hello->key_len = htons(pub_key_size);
     // Add public key
     memcpy(s_hello->data, public_key, pub_key_size);
-    // Add CA signed certificate
-    memcpy(s_hello->data + pub_key_size, certificate, cert_size);
-    size_t total_cert_size = CERT_HEADER_SIZE + pub_key_size + cert_size;
+    // Adding signature
+    size_t cert_sig_size = cert_size - CERT_HEADER_SIZE - pub_key_size;
+    size_t total_cert_size = cert_size;
+    memcpy(s_hello->data + pub_key_size, 
+           certificate + CERT_HEADER_SIZE + pub_key_size,
+           cert_sig_size);
     s_hello->cert_size = htons(total_cert_size);
 
     // Sign and add client nonce
     char signed_nonce[255];
     size_t sig_size = sign(hello->nonce, NONCE_SIZE, signed_nonce);
     s_hello->sig_size = sig_size;
-    memcpy(s_hello->data + pub_key_size + cert_size, signed_nonce, sig_size);
+    memcpy(s_hello->data + pub_key_size + cert_sig_size, signed_nonce, sig_size);
 
     msg.msg_len = htons(SERVER_HELLO_HEADER_SIZE + total_cert_size + sig_size);
 
