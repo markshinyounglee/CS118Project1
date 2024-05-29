@@ -86,3 +86,5 @@ class TestSecurity(unittest.TestCase):
         if test_0_compilation.failed:
             self.fail()
         name = self.test_client_hello.__name__
+        
+        self.make_test(name, 1)

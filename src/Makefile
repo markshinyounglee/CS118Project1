@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -g   -fsanitize=address  -lcrypto
+CFLAGS= -fsanitize=address -lcrypto
 #      debug  address sanitizer   linking libcrypto
 
 all: clean build
@@ -7,8 +7,8 @@ all: clean build
 default: build
 
 build: server.c client.c transport.c security.c
-	${CC} ${CFLAGS} -o server server.c transport.c security.c
-	${CC} ${CFLAGS} -o client client.c transport.c security.c
+	${CC} -o server server.c transport.c security.c ${CFLAGS}
+	${CC} -o client client.c transport.c security.c ${CFLAGS}
 
 clean:
 	rm -rf server client
