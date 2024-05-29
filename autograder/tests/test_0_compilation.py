@@ -1,6 +1,7 @@
 import unittest
 import subprocess
 import os
+import glob
 from gradescope_utils.autograder_utils.decorators import weight, number, hide_errors
 
 failed = True
@@ -30,9 +31,19 @@ class TestCompilation(unittest.TestCase):
 
         os.chdir(makefile_dir)
 
+        for file in glob.iglob('./**', recursive=True):
+            try:
+                with open(file, 'r', encoding="utf-8") as f:
+                    f.read()
+            except UnicodeDecodeError:
+                print(f"{file[2:]} is not allowed in your submission (is an executable). Please resubmit without it.")
+                self.fail()
+            except IsADirectoryError:
+                pass
+
         try:
             subprocess.run("runuser -u student -- make".split(), check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             print("We could not compile your executables. Verify that your Makefile is valid.")
             self.fail()
 

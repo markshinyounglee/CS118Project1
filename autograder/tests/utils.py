@@ -8,7 +8,7 @@ import string
 
 
 class ProcessRunner():
-    def __init__(self, cmd, data):
+    def __init__(self, cmd, data, stderr_file=None):
         super().__init__()
         self.cmd = cmd
         self.process = None
@@ -21,16 +21,21 @@ class ProcessRunner():
         f.close()
         self.f = open(f'/autograder/{filename}', 'rb')
 
+        if stderr_file:
+            self.stderr_file = open(f'/autograder/submission/{stderr_file}', 'wb')
+        else:
+            self.stderr_file = open(f'/autograder/submission/err{randomword(10)}', 'wb')
+
     def run(self):
         self.process = subprocess.Popen(self.cmd.split(
-        ), stdin=self.f, stdout=subprocess.PIPE, stderr=open(f'/autograder/submission/err{randomword(10)}', 'wb'), bufsize=0)
+        ), stdin=self.f, stdout=subprocess.PIPE, stderr=self.stderr_file, bufsize=0)
         if self.process.stdout:
             os.set_blocking(self.process.stdout.fileno(), False)
 
     @staticmethod
     def run_two_until_size_or_timeout(runner1, runner2, size, timeout):
         runner1.run()
-        time.sleep(0.01)
+        time.sleep(0.1)
         runner2.run()
         start_time = time.time()
         runner1_finish = False

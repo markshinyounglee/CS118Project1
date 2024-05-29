@@ -17,12 +17,12 @@ struct timeval now; // Temp for current time
 int seq = 1; // Last sent packet into tosend
 int ready = 0; // Last placed packet into tosend
 int base_seq = 1; // Last acked by client packet in tosend
-int ack = 1; // Last acked packet in torecv by server
+int ack = 0; // Last acked packet in torecv by server
 int force_ack = 0; // Send ACK without data
 
 int sec_flag = 0;
 int sec_state = INIT;
-int sec_mac = 0;
+int sec_mac = 1;
 int force_sec_mac = 0;
 
 void process_security(packet* pkt);
@@ -110,13 +110,13 @@ void recv_data(packet* pkt) {
     if (ntohl(pkt->seq) != 0) torecv[ntohl(pkt->seq) - 1] = *pkt;
 
     // If ack received, then we can move window
-    if (base_seq < ntohl(pkt->ack)) {
+    if (base_seq < ntohl(pkt->ack) + 1) {
         gettimeofday(&start, NULL);
-        base_seq = ntohl(pkt->ack);
+        base_seq = ntohl(pkt->ack) + 1;
     }
 
     // Attempt to process packets in order (skipping if packet isn't ready)
-    for (int i = ack - 1; i < MAX_SEQ; i++) {
+    for (int i = ack; i < MAX_SEQ; i++) {
         if (ntohl(torecv[i].seq) != 0) {
             process_packet(&torecv[i]);
             ack++;
@@ -159,7 +159,7 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
         /* Inspect data from client */
         if (bytes_recvd > 0) {
             // Receive rest of bytes
-            fprintf(stderr, "RECV %d %d ACK %d SIZE %d \n", bytes_recvd, ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
+            fprintf(stderr, "RECV %d ACK %d SIZE %d \n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
             recv_data(&buffer);
             continue;
         }
@@ -170,14 +170,13 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
         if (TV_DIFF(now, start) >= RTO && base_seq < seq) {
             buffer = tosend[base_seq - 1];
             buffer.ack = htonl(ack);
-            fprintf(stderr, "RTO SEND %d ACK %d, SIZE %d ", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
+            fprintf(stderr, "RTO SEND %d ACK %d SIZE %d DIAG %d %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size), base_seq, seq);
             size_t size = PACKET_HEADER_SIZE + ntohs(buffer.size);
             int did_send = sendto(sockfd, &buffer, size, 
                                 // socket  send data   how much to send
                                     0, (struct sockaddr*) addr, 
                                 // flags   where to send
                                     sizeof(struct sockaddr_in));
-            fprintf(stderr, "DID %d %d\n", did_send, errno);
             gettimeofday(&start, NULL);
             continue;
         }
@@ -186,26 +185,24 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
         buffer = tosend[seq - 1];
         if (ntohl(buffer.seq) != 0 && seq < base_seq + CWND) {
             buffer.ack = htonl(ack);
-            fprintf(stderr, "SEND %d ACK %d SIZE %d ", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
+            fprintf(stderr, "SEND %d ACK %d SIZE %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
             size_t size = PACKET_HEADER_SIZE + ntohs(buffer.size);
             int did_send = sendto(sockfd, &buffer, size, 
                             // socket  send data   how much to send
                                 0, (struct sockaddr*) addr, 
                             // flags   where to send
                                 sizeof(struct sockaddr_in));
-            fprintf(stderr, "DID %d %d\n", did_send, errno);
             seq++;
         } else if (force_ack) {
             force_ack = 0;
             memset(&buffer, 0, sizeof(buffer));
             buffer.ack = htonl(ack);
-            fprintf(stderr, "SEND %d ACK %d SIZE %d ", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
+            fprintf(stderr, "SEND %d ACK %d SIZE %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
             int did_send = sendto(sockfd, &buffer, PACKET_HEADER_SIZE, 
                             // socket  send data   how much to send
                                 0, (struct sockaddr*) addr, 
                             // flags   where to send
                                 sizeof(struct sockaddr_in));
-            fprintf(stderr, "DID %d %d\n", did_send, errno);
         }
     }
 }
