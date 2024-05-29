@@ -3,7 +3,7 @@ import multiprocessing
 
 import test_0_compilation
 
-from random import randbytes, randint, choice
+from random import randbytes, choice
 from string import ascii_letters
 from gradescope_utils.autograder_utils.decorators import weight, number, hide_errors
 from utils import proxy, byte_diff, ProcessRunner

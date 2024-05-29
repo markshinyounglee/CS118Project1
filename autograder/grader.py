@@ -4,7 +4,6 @@ import unittest
 from gradescope_utils.autograder_utils.json_test_runner import JSONTestRunner
 
 if __name__ == '__main__':
-    os.system("cp -r /autograder/source/keys /autograder/submission")
     os.system("chmod -R o+rwx /autograder/submission")
     suite = unittest.defaultTestLoader.discover('tests')
     with open('/autograder/results/results.json', 'w') as f:

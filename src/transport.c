@@ -165,21 +165,6 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
         }
 
         /* Send data back to client */
-        // Check if timer went off
-        gettimeofday(&now, NULL);
-        if (TV_DIFF(now, start) >= RTO && base_seq < seq) {
-            buffer = tosend[base_seq - 1];
-            buffer.ack = htonl(ack);
-            fprintf(stderr, "RTO SEND %d ACK %d SIZE %d DIAG %d %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size), base_seq, seq);
-            size_t size = PACKET_HEADER_SIZE + ntohs(buffer.size);
-            int did_send = sendto(sockfd, &buffer, size, 
-                                // socket  send data   how much to send
-                                    0, (struct sockaddr*) addr, 
-                                // flags   where to send
-                                    sizeof(struct sockaddr_in));
-            gettimeofday(&start, NULL);
-            continue;
-        }
 
         // Send packets in window
         buffer = tosend[seq - 1];
@@ -203,6 +188,21 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
                                 0, (struct sockaddr*) addr, 
                             // flags   where to send
                                 sizeof(struct sockaddr_in));
+        }
+
+        // Check if timer went off
+        gettimeofday(&now, NULL);
+        if (TV_DIFF(now, start) >= RTO && base_seq < seq) {
+            buffer = tosend[base_seq - 1];
+            buffer.ack = htonl(ack);
+            fprintf(stderr, "RTO SEND %d ACK %d SIZE %d DIAG %d %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size), base_seq, seq);
+            size_t size = PACKET_HEADER_SIZE + ntohs(buffer.size);
+            int did_send = sendto(sockfd, &buffer, size, 
+                                // socket  send data   how much to send
+                                    0, (struct sockaddr*) addr, 
+                                // flags   where to send
+                                    sizeof(struct sockaddr_in));
+            gettimeofday(&start, NULL);
         }
     }
 }

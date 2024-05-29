@@ -4,7 +4,7 @@ import os
 import glob
 from gradescope_utils.autograder_utils.decorators import weight, number, hide_errors
 
-failed = True
+failed = False
 dir = ""
 
 class TestCompilation(unittest.TestCase):
@@ -13,6 +13,8 @@ class TestCompilation(unittest.TestCase):
     @hide_errors()
     def test_submitted_files(self):
         """Compilation"""
+
+        global failed
 
         paths_to_check = [
             "/autograder/submission/project/Makefile",
@@ -27,6 +29,7 @@ class TestCompilation(unittest.TestCase):
 
         if makefile_dir is None:
             print("Makefile not found. Verify your submission has the correct files.")
+            failed = True
             self.fail()
 
         os.chdir(makefile_dir)
@@ -37,6 +40,7 @@ class TestCompilation(unittest.TestCase):
                     f.read()
             except UnicodeDecodeError:
                 print(f"{file[2:]} is not allowed in your submission (is an executable). Please resubmit without it.")
+                failed = True
                 self.fail()
             except IsADirectoryError:
                 pass
@@ -45,19 +49,20 @@ class TestCompilation(unittest.TestCase):
             subprocess.run("runuser -u student -- make".split(), check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError:
             print("We could not compile your executables. Verify that your Makefile is valid.")
+            failed = True
             self.fail()
 
         if not os.path.isfile(os.path.join(makefile_dir, 'server')):
             print("We could not find your server executable. Make sure it's named `server`.")
+            failed = True
             self.fail()
 
         if not os.path.isfile(os.path.join(makefile_dir, 'client')):
             print("We could not find your client executable. Make sure it's named `client`.")
+            failed = True
             self.fail()
 
         global dir
         dir = makefile_dir
-        global failed
-        failed = False
 
         

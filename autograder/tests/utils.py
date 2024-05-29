@@ -62,7 +62,7 @@ class ProcessRunner():
 
 def randomword(length):
     letters = string.ascii_lowercase
-    return ''.join(random.choice(letters) for i in range(length))
+    return ''.join(random.choice(letters) for _ in range(length))
 
 
 def byte_diff(bytes1, bytes2):
