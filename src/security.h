@@ -76,14 +76,14 @@ void generate_nonce(char* buf, int size);
 
 // Encrypt data using derived shared secret (make sure to call `derive_secret`
 // first). Uses AES-256-CBC with PKCS7 padding. Buffers `iv` and `cipher` will have
-// the resulting initial vector and ciphertext. 
+// the resulting initial vector and ciphertext.
 // Set `using_mac` to a non-zero value to use the `enc_key` for encryption
 // Returns size of ciphertext
 size_t encrypt_data(char *data, size_t size, char *iv, char *cipher, int using_mac);
 
 // Decrypt data using derived shared secret (make sure to call `derive_secret`
 // first). Uses AES-256-CBC with PKCS7 padding. Buffer `data` will have
-// the resulting decrypted data. 
+// the resulting decrypted data.
 // Set `using_mac` to a non-zero value to use the `enc_key` for decryption
 // Returns size of data
 size_t decrypt_cipher(char *cipher, size_t size, char *iv, char *data, int using_mac);

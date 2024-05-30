@@ -117,12 +117,21 @@ void process_security(packet* pkt) {
 }
 
 int main(int argc, char** argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: client <security mode> <hostname> <port> <certificate authority public key>\n");
+        exit(1);
+    }
 
     // Set security mode
     if (argv[1][0] == '1') sec_flag = 1;
 
+    if (sec_flag && argc < 5) {
+        fprintf(stderr, "Usage: client 1 <hostname> <port> <certificate authority public key>\n");
+        exit(1);
+    }
+
     // Not part of official spec, but just for testing
-    if (argv[5][0] == '1') {
+    if (argc >= 6 && argv[5][0] == '1') {
         force_sec_mac = 1;
         sec_mac = 1;
     }
@@ -157,6 +166,6 @@ int main(int argc, char** argv) {
         generate_hello();
     }
     listen_loop(sockfd, &server_addr);
-    
+
     return 0;
 }

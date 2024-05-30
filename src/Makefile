@@ -1,6 +1,5 @@
 CC=gcc
-CFLAGS= -fsanitize=address -lcrypto
-#      debug  address sanitizer   linking libcrypto
+CFLAGS= -lcrypto
 
 all: clean build
 
@@ -11,7 +10,7 @@ build: server.c client.c transport.c security.c
 	${CC} -o client client.c transport.c security.c ${CFLAGS}
 
 clean:
-	rm -rf server client
+	rm -rf server client *.bin *.out *.dSYM
 
 zip: clean
 	rm -f project2.zip

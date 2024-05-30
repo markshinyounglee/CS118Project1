@@ -2,7 +2,8 @@ FROM gradescope/autograder-base:latest as build1
 
 RUN apt update \
     && apt install -y libssl-dev \
-    && adduser student --no-create-home --disabled-password --gecos ""
+    && adduser student --no-create-home --disabled-password --gecos "" \
+    && apt install -y tmux
 
 FROM gradescope/autograder-base:latest as build2
 RUN apt update && apt install -y libssl-dev

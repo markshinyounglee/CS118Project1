@@ -22,7 +22,7 @@ int force_ack = 0; // Send ACK without data
 
 int sec_flag = 0;
 int sec_state = INIT;
-int sec_mac = 1;
+int sec_mac = 0;
 int force_sec_mac = 0;
 
 void process_security(packet* pkt);
@@ -107,6 +107,7 @@ void make_packet(char* data, int len) {
 }
 
 void recv_data(packet* pkt) {
+    if (ntohl(pkt->seq) >= MAX_SEQ) { fprintf(stderr, "INVALID SEQ %d\n", ntohl(pkt->seq)); return; }
     if (ntohl(pkt->seq) != 0) torecv[ntohl(pkt->seq) - 1] = *pkt;
 
     // If ack received, then we can move window
@@ -151,9 +152,9 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
 
         /* Listen for data from clients */
         // Receive only packet header
-        int bytes_recvd = recvfrom(sockfd, &buffer, sizeof(buffer), 
+        int bytes_recvd = recvfrom(sockfd, &buffer, sizeof(buffer),
                                 // socket  store data  how much
-                                0, (struct sockaddr*) addr, 
+                                0, (struct sockaddr*) addr,
                                 &addr_size);
 
         /* Inspect data from client */
@@ -172,9 +173,9 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
             buffer.ack = htonl(ack);
             fprintf(stderr, "SEND %d ACK %d SIZE %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
             size_t size = PACKET_HEADER_SIZE + ntohs(buffer.size);
-            int did_send = sendto(sockfd, &buffer, size, 
+            int did_send = sendto(sockfd, &buffer, size,
                             // socket  send data   how much to send
-                                0, (struct sockaddr*) addr, 
+                                0, (struct sockaddr*) addr,
                             // flags   where to send
                                 sizeof(struct sockaddr_in));
             seq++;
@@ -183,9 +184,9 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
             memset(&buffer, 0, sizeof(buffer));
             buffer.ack = htonl(ack);
             fprintf(stderr, "SEND %d ACK %d SIZE %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
-            int did_send = sendto(sockfd, &buffer, PACKET_HEADER_SIZE, 
+            int did_send = sendto(sockfd, &buffer, PACKET_HEADER_SIZE,
                             // socket  send data   how much to send
-                                0, (struct sockaddr*) addr, 
+                                0, (struct sockaddr*) addr,
                             // flags   where to send
                                 sizeof(struct sockaddr_in));
         }
@@ -197,9 +198,9 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
             buffer.ack = htonl(ack);
             fprintf(stderr, "RTO SEND %d ACK %d SIZE %d DIAG %d %d\n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size), base_seq, seq);
             size_t size = PACKET_HEADER_SIZE + ntohs(buffer.size);
-            int did_send = sendto(sockfd, &buffer, size, 
+            int did_send = sendto(sockfd, &buffer, size,
                                 // socket  send data   how much to send
-                                    0, (struct sockaddr*) addr, 
+                                    0, (struct sockaddr*) addr,
                                 // flags   where to send
                                     sizeof(struct sockaddr_in));
             gettimeofday(&start, NULL);

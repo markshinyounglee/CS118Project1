@@ -33,6 +33,7 @@ class TestCompilation(unittest.TestCase):
             self.fail()
 
         os.chdir(makefile_dir)
+        os.system("runuser -u student -- make clean")
 
         for file in glob.iglob('./**', recursive=True):
             try:

@@ -117,11 +117,26 @@ void process_security(packet* pkt) {
 }
 
 int main(int argc, char** argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: server <security mode> <port> <private key> <certificate>\n");
+        exit(1);
+    }
+
     // Set security mode
     if (argv[1][0] == '1') sec_flag = 1;
 
+    if (sec_flag && argc < 5) {
+        fprintf(stderr, "Usage: server 1 <port> <private key> <certificate>\n");
+        exit(1);
+    }
+
     // Not part of official spec, but just for testing
-    if (argv[5][0] == '1') sec_mac = 1;
+    if (argc >= 6 && argv[5][0] == '0') {
+        sec_mac = 0;
+    } else {
+        // Default to enabled; this is negotiated from client
+        sec_mac = 1;
+    }
 
     /* Create sockets */
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -157,6 +172,12 @@ int main(int argc, char** argv) {
     socklen_t s;
     char buffer;
 
+    if (sec_flag) {
+        load_private_key(argv[3]);
+        load_certificate(argv[4]);
+        derive_public_key();
+    }
+
     // Wait for client connection
     while (1) {
         int bytes_recvd = recvfrom(sockfd, &buffer, sizeof(buffer), 
@@ -164,14 +185,8 @@ int main(int argc, char** argv) {
                                 &s);
         if (bytes_recvd > 0) break;
     }
-
-    if (sec_flag) {
-        load_private_key(argv[3]);
-        load_certificate(argv[4]);
-        derive_public_key();
-    }
+    
     listen_loop(sockfd, &client_addr);
     
     return 0;
 }
-

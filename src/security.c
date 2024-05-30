@@ -22,7 +22,9 @@ char* mac_key = NULL;
 
 void load_private_key(char* filename) {
     FILE* fp = fopen(filename, "r");
+    if (fp == NULL) { fprintf(stderr, "Error: invalid private key filename\n"); exit(1); }
     ec_priv_key = d2i_PrivateKey_fp(fp, NULL);
+    if (ec_priv_key == NULL) { fprintf(stderr, "Error: invalid private key\n"); exit(1); }
     fclose(fp);
 }
 
@@ -34,14 +36,16 @@ void load_peer_public_key(char* peer_key, size_t size) {
 
 void load_ca_public_key(char* filename) {
     FILE* fp = fopen(filename, "r");
+    if (fp == NULL) { fprintf(stderr, "Error: invalid certificate authority public key filename\n"); exit(1); }
     ec_ca_public_key = d2i_PUBKEY_fp(fp, NULL);
+    if (ec_ca_public_key == NULL) { fprintf(stderr, "Error: invalid certificate authority public key\n"); exit(1); }
     fclose(fp);
 }
 
 void load_certificate(char* filename) {
     FILE* fp = fopen(filename, "r");
     char* cert;
-
+    if (fp == NULL) { fprintf(stderr, "Error: invalid certificate filename\n"); exit(1); }
     fseek(fp, 0, SEEK_END);
     cert_size = ftell(fp);
     cert = malloc(cert_size);
