@@ -12,6 +12,7 @@ if __name__ == '__main__':
             for test in json['tests']:
                 if 'output' in test:
                     test['output'] = test['output'].replace('Test failed', '')
+            json['tests'] = sorted(json['tests'], key=lambda x: x['number'])
         runner = JSONTestRunner(
             visibility='visible', stream=f, failure_prefix="", post_processor=post_process)
         runner.run(suite)

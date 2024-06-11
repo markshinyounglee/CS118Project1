@@ -117,7 +117,7 @@ void process_security(packet* pkt) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
+    if (argc < 3) {
         fprintf(stderr, "Usage: server <security mode> <port> <private key> <certificate>\n");
         exit(1);
     }
@@ -141,7 +141,9 @@ int main(int argc, char** argv) {
     /* Create sockets */
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
                      // use IPv4  use UDP
-
+    // Error if socket could not be created
+    if (sockfd < 0) return errno;
+    
     // Set socket for nonblocking
     int flags = fcntl(sockfd, F_GETFL);
     flags |= O_NONBLOCK;
@@ -169,7 +171,7 @@ int main(int argc, char** argv) {
     if (did_bind < 0) return errno;
 
     struct sockaddr_in client_addr; // Same information, but about client
-    socklen_t s;
+    socklen_t s = sizeof(struct sockaddr_in);
     char buffer;
 
     if (sec_flag) {

@@ -53,7 +53,7 @@ size_t encode_data(char* buffer) {
     fprintf(stderr, sec_mac ? "MAC %d %ld\n" : "ENC %d %ld\n", bytes_read, pay_size);
     dat->payload_size = htons(pay_size);
 
-    msg->msg_len = htons(SECURITY_HEADER_SIZE + DATA_HEADER_SIZE + pay_size + (sec_mac ? MAC_SIZE : 0));
+    msg->msg_len = htons(DATA_HEADER_SIZE + pay_size + (sec_mac ? MAC_SIZE : 0));
 
     return SECURITY_HEADER_SIZE + DATA_HEADER_SIZE + pay_size + (sec_mac ? MAC_SIZE : 0);
 }
@@ -144,7 +144,7 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
 
     /* Create buffer to store incoming data */
     packet buffer = {0};
-    socklen_t addr_size = sizeof(struct sockaddr);
+    socklen_t addr_size = sizeof(struct sockaddr_in);
 
     // Loop
     while (1) {
@@ -162,7 +162,10 @@ void listen_loop(int sockfd, struct sockaddr_in* addr) {
             // Receive rest of bytes
             fprintf(stderr, "RECV %d ACK %d SIZE %d \n", ntohl(buffer.seq), ntohl(buffer.ack), ntohs(buffer.size));
             recv_data(&buffer);
-            continue;
+        } else {
+            if (bytes_recvd == -1 && errno != EAGAIN) {
+                exit(13);
+            }
         }
 
         /* Send data back to client */

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #include "consts.h"
 #include "security.h"
@@ -117,7 +118,7 @@ void process_security(packet* pkt) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
+    if (argc < 4) {
         fprintf(stderr, "Usage: client <security mode> <hostname> <port> <certificate authority public key>\n");
         exit(1);
     }
@@ -139,6 +140,8 @@ int main(int argc, char** argv) {
     /* Create sockets */
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
                      // use IPv4  use UDP
+    // Error if socket could not be created
+    if (sockfd < 0) return errno;
 
     // Set socket for nonblocking
     int flags = fcntl(sockfd, F_GETFL);
