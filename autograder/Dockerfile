@@ -11,8 +11,6 @@ COPY src /src
 RUN cd /src && make && rm -rf Makefile *.c *.h
 
 FROM build1
-COPY tutorial/keys /autograder/source/keys
-RUN chmod -R o+r /autograder/source/keys
 COPY --from=build2 /src /autograder/source/src
 COPY autograder/run_autograder /autograder
 COPY autograder /autograder/source
