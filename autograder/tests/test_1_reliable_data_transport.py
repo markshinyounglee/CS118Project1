@@ -96,7 +96,7 @@ class TestRDT(unittest.TestCase):
         if fail:
             self.fail()
 
-    @weight(5)
+    @weight(25)
     @number(1.1)
     @hide_errors()
     def test_self_ascii(self):
@@ -110,7 +110,7 @@ class TestRDT(unittest.TestCase):
         self.make_test(FILE_SIZE, TIMEOUT, True, False, False,
                        0, 0, self.test_self_ascii.__name__)
 
-    @weight(5)
+    @weight(25)
     @number(1.2)
     @hide_errors()
     def test_self(self):
@@ -124,7 +124,7 @@ class TestRDT(unittest.TestCase):
         self.make_test(FILE_SIZE, TIMEOUT, False, False,
                        False, 0, 0, self.test_self.__name__)
 
-    @weight(5)
+    @weight(25)
     @number(1.3)
     @hide_errors()
     def test_client_normal(self):
@@ -138,7 +138,7 @@ class TestRDT(unittest.TestCase):
         self.make_test(FILE_SIZE, TIMEOUT, False, False, True,
                        0, 0, self.test_client_normal.__name__)
 
-    @weight(5)
+    @weight(25)
     @number(1.4)
     @hide_errors()
     def test_server_normal(self):
