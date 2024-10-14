@@ -33,7 +33,7 @@ class ProcessRunner():
             os.set_blocking(self.process.stdout.fileno(), False)
 
     @staticmethod
-    def run_two_until_size_or_timeout(runner1, runner2, size, timeout):
+    def run_two_until_size_or_timeout(runner1, runner2, size1, size2, timeout):
         runner1.run()
         time.sleep(0.1)
         runner2.run()
@@ -44,20 +44,33 @@ class ProcessRunner():
             output1 = runner1.process.stdout.read(2000)
             if output1:
                 runner1.stdout += output1
-                if len(runner1.stdout) >= size:
+                if len(runner1.stdout) >= size1:
                     runner1_finish = True
 
             output2 = runner2.process.stdout.read(2000)
             if output2:
                 runner2.stdout += output2
-                if len(runner2.stdout) >= size:
+                if len(runner2.stdout) >= size2:
                     runner2_finish = True
 
             if runner1_finish and runner2_finish:
                 break
 
+        # Close stdouts
+        runner1.process.stdout.close()
+        runner2.process.stdout.close()
+
+        # Kill processes
         runner1.process.kill()
         runner2.process.kill()
+        runner1.process.wait()
+        runner2.process.wait()
+
+        # Close files
+        runner1.stderr_file.close()
+        runner2.stderr_file.close()
+        runner1.f.close()
+        runner2.f.close()
 
 
 def randomword(length):
