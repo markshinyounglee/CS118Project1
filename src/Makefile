@@ -1,13 +1,13 @@
-CC=gcc
+CC=g++
 CFLAGS= 
 
 all: clean build
 
 default: build
 
-build: server.c client.c 
-	${CC} -o server server.c ${CFLAGS}
-	${CC} -o client client.c ${CFLAGS}
+build: server.cpp client.cpp 
+	${CC} -o server server.cpp ${CFLAGS}
+	${CC} -o client client.cpp ${CFLAGS}
 
 clean:
 	rm -rf server client *.bin *.out *.dSYM
@@ -15,5 +15,5 @@ clean:
 zip: clean
 	rm -f project.zip
 	mkdir -p project
-	cp server.c client.c Makefile project
+	cp server.cpp client.cpp Makefile project
 	zip project0.zip project/*

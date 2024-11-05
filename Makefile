@@ -1,24 +1,31 @@
 # NOTE: Make sure you have your project files in the ./project directory
 # Will run the autograder and place the results in ./results/results.json
+
+IMAGE=reliability-is-essential
+
 run:
+	docker pull eado0/$(IMAGE)
 	docker run --rm \
 		-v ./project:/autograder/submission \
 		-v ./results:/autograder/results \
-		sockets-are-cool \
+		eado0/$(IMAGE) \
 		/autograder/run_autograder && cat results/results.json
+	rm project/client
+	rm project/server
 
 # In case you want to run the autograder manually, use interactive
 interactive:
-	(docker ps | grep sockets-are-cool && \
-	docker exec -it sockets-are-cool bash) || \
-	docker run --rm --name sockets-are-cool -it \
+	docker pull eado0/$(IMAGE)
+	(docker ps | grep $(IMAGE) && \
+	docker exec -it eado0/$(IMAGE) bash) || \
+	docker run --rm --name ${IMAGE} -it \
 		-v ./project:/autograder/submission \
 		-v ./results:/autograder/results \
-		sockets-are-cool bash
+		eado0/$(IMAGE) bash
 
 build:
-	docker build -t sockets-are-cool -f autograder/Dockerfile .
+	docker build -t reliability-is-essential -f autograder/Dockerfile .
 
 publish:
-	docker tag sockets-are-cool eado0/sockets-are-cool
-	docker push eado0/sockets-are-cool
+	docker tag reliability-is-essential eado0/reliability-is-essential
+	docker push eado0/reliability-is-essential
