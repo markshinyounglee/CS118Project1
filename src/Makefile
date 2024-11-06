@@ -16,4 +16,4 @@ zip: clean
 	rm -f project.zip
 	mkdir -p project
 	cp server.cpp client.cpp Makefile project
-	zip project0.zip project/*
+	zip project1.zip project/*

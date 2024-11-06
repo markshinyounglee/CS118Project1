@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <list>
+#include <cstring>
 
 #define MAX_WINDOW 20240
 #define DELAY_RETRANSMIT 1
@@ -27,13 +28,13 @@ using namespace std;
 
 typedef struct { // sliding window
   list<packet> bufcontent; // payload length should be 20240
-  unsigned int len; // check the length to be less than MAX_WINDOW
+  uint32_t len; // check the length to be less than MAX_WINDOW
 } ntbuf;
 
 ntbuf sndbuf; // restricted to 20240 bytes
 ntbuf rcvbuf; // resizable
 
-clock_t start = 0, end = 0; // keep track of time elapsed
+clock_t start_clock = 0, end_clock = 0; // keep track of time elapsed
 
 // for sending buffer, use resizable array (linked list)
 // while ensuring that the sum of payloads stay within 20240 bytes
@@ -100,7 +101,7 @@ int main(int argc, char **argv) {
   while(1)
   {
     bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
-                           (struct sockaddr*), &client_addr, &s);
+                           (struct sockaddr*)&client_addr, &s);
     if (bytes_recvd <= 0 && !client_connected)
       continue;
     client_connected = 1; // At this point, the client has connected and sent data
@@ -114,9 +115,9 @@ int main(int argc, char **argv) {
     .seq = server_seq,
     .length = 0,
 	  .flags = 0b11, // both ACK and SYN flag set
-	  .unused = 0,
-	  .payload = buffer
+	  .unused = 0
   };
+  memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer
   server_seq++; // increment sequence number after transmission
   while (sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, 
       (struct sockaddr *)&client_addr, sizeof(struct sockaddr_in)) != -1);
@@ -133,7 +134,7 @@ int main(int argc, char **argv) {
   // before processing to ensure FIFO delivery (CS 134)
   // retransmit only when 1) there are 3 duplicate ACKs or 2) 1 second of no ACK
   while (1) {
-    start = ack_recvd ? clock() : start;  // reset start iff ack is received
+    start_clock = ack_recvd ? clock() : start_clock;  // reset start iff ack is received
     // Receive from socket
     bytes_recvd = recvfrom(sockfd, &buffer, sizeof(buffer), 0,
                                (struct sockaddr *)&client_addr, &s);
@@ -153,11 +154,11 @@ int main(int argc, char **argv) {
       sendto(sockfd, &buffer, bytes_read, 0, (struct sockaddr *)&client_addr,
              sizeof(struct sockaddr_in));
     }
-    end = clock(); 
+    end_clock = clock(); 
     
     // at the end of each loop, check if there are any ACKs
     // if there was none for 1s, retransmit packet with lowest sequence number
-    if( ((double)(end-start)/CLOCKS_PER_SEC) >= 1.0) 
+    if( ((double)(end_clock-start_clock)/CLOCKS_PER_SEC) >= 1.0) 
     {
       if (!ack_recvd)
       {

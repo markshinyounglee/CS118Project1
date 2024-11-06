@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <list>
-
+#include <cstring>
 
 #define MAX_WINDOW 20240
 #define DELAY_RETRANSMIT 1
@@ -28,13 +28,13 @@ using namespace std;
 
 typedef struct { // sliding window
   list<packet> bufcontent; // payload length should be 20240
-  unsigned int len;  // check the length of buffer to be less than MAX_WINDOW
+  uint32_t len;  // check the length of buffer to be less than MAX_WINDOW
 } ntbuf;
 
 ntbuf sndbuf; // restricted to 20240 bytes
 ntbuf rcvbuf; // resizable
 
-clock_t start = 0, end = 0; // keep track of time elapsed
+clock_t start_clock = 0, end_clock = 0; // keep track of time elapsed
 
 packet* makePacket(uint32_t, uint32_t, uint16_t, 
                   uint8_t, uint8_t, uint8_t, uint8_t*);
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET; // use IPv4
   // Only supports localhost as a hostname, but that's all we'll test on
-  char *addr = strcmp(argv[1], "localhost") == 0 ? "127.0.0.1" : argv[1];
+  char *addr = strcmp(argv[1], "localhost") == 0 ? strdup("127.0.0.1") : strdup(argv[1]);
   server_addr.sin_addr.s_addr = inet_addr(addr);
   // Set sending port
   int PORT = atoi(argv[2]);
@@ -94,26 +94,28 @@ int main(int argc, char **argv) {
 	  .seq = client_seq, 
 	  .length = 0,
 	  .flags = 1, // only SYNC 
-	  .unused = 0,
-	  .payload = buffer
+	  .unused = 0
   };
+  memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer element
   client_seq++; // increment
   while (sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, 
       (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in)) != -1);
   // phase 2: receive data from server
   while(recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
-                           (struct sockaddr*), &server_addr, &s) <= 0);
+                           (struct sockaddr*)&server_addr, &s) <= 0);
   // phase 3: send a final packet to the server
   // Read from stdin
-  bytes_read = read(STDIN_FILENO, &buffer, sizeof(buffer));
+  do {
+    bytes_read = read(STDIN_FILENO, &buffer, sizeof(buffer));
+  } while(bytes_read < 0);
   sending_pkt = {
     .ack = ntohl(received_pkt.seq) + 1, // Make sure to convert to little endian
 	  .seq = client_seq,
 	  .length = bytes_read,
 	  .flags = 0b10, // only ACK
-	  .unused = 0,
-	  .payload = buffer
+	  .unused = 0
   };
+  memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer
   client_seq++;
   sndbuf.bufcontent.push_back(sending_pkt); // queue in buffer
   sndbuf.len += bytes_read; // increment current payload length
@@ -128,10 +130,33 @@ int main(int argc, char **argv) {
   // retransmit only when 1) there are 3 duplicate ACKs or 2) 1 second of no ACK
   // Listen loop
   while (1) {
-    start = ack_recvd ? clock() : start;  // reset start iff ack is received
+    start_clock = ack_recvd ? clock() : start_clock;  // reset start iff ack is received
+    
     // Receive from socket
-    bytes_recvd = recvfrom(sockfd, &buffer, sizeof(buffer), 0,
+    bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
                                (struct sockaddr *)&server_addr, &s);
+    ack_recvd = (received_pkt.flags >> 1) & 1;
+    // if the ACK flag is set, scan the sndbuf and remove all packets with sequence number less than ACK number
+    if ack_recvd // if the ACK flag is set
+    {
+      ack = received_pkt.ack;
+      list<packet>::iterator iter; // do linear scan for send buffer
+      for (iter = sndbuf.bufcontent.begin(); iter != sndbuf.bufcontent.end(); ++iter)
+      {
+        if(iter.seq < ack)
+        {
+          sndbuf.len -= iter.length;
+          iter = sndbuf.bufcontent.erase(iter);
+        }
+      }
+    }
+    // place the packet in the receiving buffer
+    rcvbuf.bufcontent.push_back(received_pkt);
+    rcvbuf.len += received_pkt.length;
+    // do a linear scan in the receiving buffer starting with the next SEQ number
+
+
+    // after the linear scan, send the ACK number
 
     // Data available to write
     if (bytes_recvd > 0) {
@@ -142,15 +167,29 @@ int main(int argc, char **argv) {
     bytes_read = read(STDIN_FILENO, &buffer, sizeof(buffer));
 
     // Data available to send from stdin
-    if (bytes_read > 0) {
-      sendto(sockfd, &buffer, bytes_read, 0, (struct sockaddr *)&server_addr,
+    // Keep sending as long as the sending buffer has space
+    if (bytes_read > 0 && sndbuf.len <= MAX_WINDOW) {
+      // 1. place it in a new packet's payload
+      sending_pkt = { 
+        .ack = ntohl(received_pkt.seq) + 1,
+        .seq = client_seq, 
+        .length = bytes_read,
+        .flags = 0b10, // only ACK 
+        .unused = 0
+      };
+      memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer element
+      client_seq++; // increment
+      // 2. send the packet AND keep it in the sending buffer
+      sndbuf.bufcontent.push_back(sending_pkt);
+      sndbuf.len += bytes_read;
+      sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&server_addr,
              sizeof(struct sockaddr_in));
     }
-    end = clock(); 
+    end_clock = clock(); 
     
     // at the end of each loop, check if there are any ACKs
     // if there was none for 1s, retransmit packet with lowest sequence number
-    if( ((double)(end-start)/CLOCKS_PER_SEC) >= 1.0) 
+    if( ((double)(end_clock-start_clock)/CLOCKS_PER_SEC) >= 1.0) 
     {
       if(!ack_recvd)
       {
@@ -168,7 +207,7 @@ int main(int argc, char **argv) {
 packet* makePacket(uint32_t, uint32_t, uint16_t, 
                   uint8_t, uint8_t, uint8_t, uint8_t*)
 {
-  pkt = (packet*)malloc(sizeof(packet));
+  packet* pkt = (packet*)malloc(sizeof(packet));
 
 
   return pkt;
