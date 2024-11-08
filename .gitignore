@@ -7,7 +7,6 @@ tutorial/cipher
 tutorial/key_deriv
 tutorial/mac
 tutorial/signing_nonce
-project
 venv
 results
 __pycache__
