@@ -88,6 +88,8 @@ int main(int argc, char **argv) {
   struct sockaddr_in client_addr; // Same information, but about client
   socklen_t s = sizeof(struct sockaddr_in);
   char buffer[MSS] = {0}; // use memset(buffer, 0, (MSS) * sizeof(char)) if this doesn't work
+  char writebuf[MAX_WINDOW] = {0}; // what we will write in STDOUT
+
 
   int client_connected = 0;
 
@@ -131,22 +133,34 @@ int main(int argc, char **argv) {
   print_diag(&sending_pkt, SEND);
   sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, 
       (struct sockaddr *)&client_addr, sizeof(struct sockaddr_in));
-  while ((bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
-                           (struct sockaddr*)&client_addr, &s)) <= 0);
-  if(bytes_read > 0)
+
+  while(1)
   {
-    uint16_t payload_size = ntohs(received_pkt.length);
-    ack += payload_size; // increment by the payload length
-    // instead of putting things in writebuf, just write to STDOUT directly
-    write(STDOUT_FILENO, received_pkt.payload, payload_size);
-    fprintf(stderr, "ack number is now %d -- server\n", ack);
+    bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
+                           (struct sockaddr*)&client_addr, &s);
+    if (bytes_recvd <= 0)
+      continue;
+    uint8_t payload_size = ntohs(received_pkt.length);
+    if (payload_size >= 1) {
+      ack = ntohl(received_pkt.seq) + payload_size;
+      write(STDOUT_FILENO, received_pkt.payload, payload_size);
+      fprintf(stderr, "case 1 -- server\n");
+    }
+    else
+    {
+      ack = ntohl(received_pkt.seq) + 1;
+      fprintf(stderr, "case 2 -- server\n");
+    }
+    print_diag(&received_pkt, RECV);
+    break;
   }
-  else 
-  {
-    ack = ntohl(received_pkt.seq)+1;
-    fprintf(stderr, "ack number is now %d -- server\n", ack);
-  }
-  print_diag(&received_pkt, RECV);         
+  
+  /*
+  while(recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
+                           (struct sockaddr*)&client_addr, &s) <= 0);
+  ack = ntohl(received_pkt.seq)+1;
+  print_diag(&received_pkt, RECV);   
+  */      
        
   fprintf(stderr, "handshake complete - server\n");
   // exit(1);
@@ -165,7 +179,7 @@ int main(int argc, char **argv) {
   while (1) {
     start_clock = ack_recvd ? clock() : start_clock;  // reset start iff ack is received
     
-    // part 1. receive logic
+    // part 1. send logic
     // Receive from socket
     bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
                                (struct sockaddr *)&client_addr, &s);
@@ -253,7 +267,7 @@ int main(int argc, char **argv) {
     }
 
 
-    // part 2. send logic
+    // part 2. receive logic
     // after the linear scan, set the next ACK number
     // we want the next in-order packet number
     // The logic is already handled previously as we increment ack
