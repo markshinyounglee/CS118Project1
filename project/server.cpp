@@ -140,15 +140,17 @@ int main(int argc, char **argv) {
                            (struct sockaddr*)&client_addr, &s);
     if (bytes_recvd <= 0)
       continue;
-    uint8_t payload_size = ntohs(received_pkt.length);
+    uint16_t payload_size = ntohs(received_pkt.length);
     if (payload_size >= 1) {
       ack = ntohl(received_pkt.seq) + payload_size;
+      fprintf(stderr, "ack number is now %d -- server\n", ack);
       write(STDOUT_FILENO, received_pkt.payload, payload_size);
       fprintf(stderr, "case 1 -- server\n");
     }
     else
     {
       ack = ntohl(received_pkt.seq) + 1;
+      fprintf(stderr, "ack number is now %d -- server\n", ack);
       fprintf(stderr, "case 2 -- server\n");
     }
     print_diag(&received_pkt, RECV);
@@ -179,7 +181,7 @@ int main(int argc, char **argv) {
   while (1) {
     start_clock = ack_recvd ? clock() : start_clock;  // reset start iff ack is received
     
-    // part 1. send logic
+    // part 1. receive logic
     // Receive from socket
     bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
                                (struct sockaddr *)&client_addr, &s);
@@ -227,7 +229,7 @@ int main(int argc, char **argv) {
       }
       // place the packet in the receiving buffer
       rcvbuf.bufcontent.push_back(received_pkt);
-      rcvbuf.len += ntohl(received_pkt.length);
+      rcvbuf.len += ntohs(received_pkt.length);
       // do a linear scan in the receiving buffer starting with the next SEQ number
       for (list<packet>::iterator iter = rcvbuf.bufcontent.begin(); iter != rcvbuf.bufcontent.end(); )
       {
@@ -267,7 +269,7 @@ int main(int argc, char **argv) {
     }
 
 
-    // part 2. receive logic
+    // part 2. send logic
     // after the linear scan, set the next ACK number
     // we want the next in-order packet number
     // The logic is already handled previously as we increment ack

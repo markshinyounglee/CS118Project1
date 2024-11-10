@@ -24,8 +24,8 @@ interactive:
 		eado0/$(IMAGE) bash
 
 build:
-	docker build -t reliability-is-essential -f autograder/Dockerfile .
+	docker build -t $(IMAGE) -f autograder/Dockerfile .
 
 publish:
-	docker tag reliability-is-essential eado0/reliability-is-essential
-	docker push eado0/reliability-is-essential
+	docker tag $(IMAGE) eado0/$(IMAGE)
+	docker push eado0/$(IMAGE)
