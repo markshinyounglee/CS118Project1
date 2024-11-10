@@ -1,6 +1,7 @@
 .vscode
 *.zip
 *.dSYM
+*.out
 server
 client
 tutorial/cipher

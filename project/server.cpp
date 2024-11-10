@@ -10,10 +10,10 @@
 #include <time.h>
 #include <list>
 #include <cstring>
+#include <climits>
 #include "diagnostics.h" // delete after use
 
 #define MAX_WINDOW 20240
-#define DELAY_RETRANSMIT 1
 #define MAX_DELAY_HOLD 3
 
 // uncomment before submission
@@ -88,14 +88,13 @@ int main(int argc, char **argv) {
   struct sockaddr_in client_addr; // Same information, but about client
   socklen_t s = sizeof(struct sockaddr_in);
   char buffer[MSS] = {0}; // use memset(buffer, 0, (MSS) * sizeof(char)) if this doesn't work
-  char writebuf[MAX_WINDOW] = {0}; // what we will write in STDOUT
-
 
   int client_connected = 0;
 
   // 1. Perform handshake
   srand(time(NULL));
-  uint32_t server_seq = 300; // rand(); // return random number for packet
+  uint32_t server_seq = 300; // rand() % (INT_MAX/4); // 300; // return random number for packet
+  // max seq number is INT_MAX/2
   uint32_t ack;
   bool ack_recvd = false;
   packet received_pkt = {0};  // pkt variable we use
@@ -113,6 +112,7 @@ int main(int argc, char **argv) {
     if (bytes_recvd <= 0 && !client_connected)
       continue;
     client_connected = 1; // At this point, the client has connected and sent data
+    ack = ntohl(received_pkt.seq)+1;
     print_diag(&received_pkt, RECV);
     break;
   }
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
   // after receiving data packet from client, send the ACK packet
   // respond with 0 length payload
   sending_pkt = {
-    .ack = htonl(ntohl(received_pkt.seq) + 1), // Make sure to convert to little endian
+    .ack = htonl(ack), // Make sure to convert to little endian
     .seq = htonl(server_seq),
     .length = 0,
 	  .flags = 0b11, // both ACK and SYN flag set
@@ -131,11 +131,25 @@ int main(int argc, char **argv) {
   print_diag(&sending_pkt, SEND);
   sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, 
       (struct sockaddr *)&client_addr, sizeof(struct sockaddr_in));
-  while(recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
-                           (struct sockaddr*)&client_addr, &s) <= 0);
-  print_diag(&received_pkt, RECV);               
+  while ((bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
+                           (struct sockaddr*)&client_addr, &s)) <= 0);
+  if(bytes_read > 0)
+  {
+    uint16_t payload_size = ntohs(received_pkt.length);
+    ack += payload_size; // increment by the payload length
+    // instead of putting things in writebuf, just write to STDOUT directly
+    write(STDOUT_FILENO, received_pkt.payload, payload_size);
+    fprintf(stderr, "ack number is now %d -- server\n", ack);
+  }
+  else 
+  {
+    ack = ntohl(received_pkt.seq)+1;
+    fprintf(stderr, "ack number is now %d -- server\n", ack);
+  }
+  print_diag(&received_pkt, RECV);         
+       
   fprintf(stderr, "handshake complete - server\n");
-  exit(1);
+  // exit(1);
   
   // phase 3: receive a packet from client
   // listening merged with step 2
@@ -150,36 +164,164 @@ int main(int argc, char **argv) {
   // retransmit only when 1) there are 3 duplicate ACKs or 2) 1 second of no ACK
   while (1) {
     start_clock = ack_recvd ? clock() : start_clock;  // reset start iff ack is received
-    // Receive from socket
-    bytes_recvd = recvfrom(sockfd, &buffer, sizeof(buffer), 0,
-                               (struct sockaddr *)&client_addr, &s);
-    if (bytes_recvd <= 0 && !client_connected)
-      continue;
     
-    // Data available to write
-    if (bytes_recvd > 0) {
-      write(STDOUT_FILENO, buffer, bytes_recvd);
+    // part 1. receive logic
+    // Receive from socket
+    bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
+                               (struct sockaddr *)&client_addr, &s);
+    if(bytes_recvd > 0)
+    {
+      print_diag(&received_pkt, RECV);
+      ack_recvd = (received_pkt.flags >> 1) & 1;
+      // if the ACK flag is set, scan the sndbuf and remove all packets with sequence number less than ACK number
+      if (ack_recvd) // if the ACK flag is set
+      {
+        uint32_t received_ack = ntohl(received_pkt.ack); // dealing with received packets
+        uint32_t prev_ack = ntohl(rcvbuf.bufcontent.back().ack);
+
+        // if there are 3 duplicate acks, you should retransmit
+        // if 3 duplicate ACKs, resend the packet with the lowest sequence number
+        if (received_ack == prev_ack)
+          ack_counter++;
+        else
+          ack_counter = 1;
+        if (ack_counter >= MAX_DELAY_HOLD) 
+        {
+          sending_pkt = sndbuf.bufcontent.front();
+          fprintf(stderr, "Retransmitted: 3 duplicate ACKs -- server\n");
+          print_diag(&sending_pkt, SEND);
+          sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
+                sizeof(struct sockaddr_in));
+          ack_counter = 0;
+        }
+
+        // do linear scan for send buffer
+        for (list<packet>::iterator iter = sndbuf.bufcontent.begin(); iter != sndbuf.bufcontent.end(); )
+        {
+          if(ntohl(iter->seq) < received_ack)
+          {
+            sndbuf.len -= ntohs(iter->length);
+            iter = sndbuf.bufcontent.erase(iter);
+            fprintf(stderr, "send buffer popped -- server\n");
+            fprintf(stderr, "remaining length: %d\n", sndbuf.len);
+          }
+          else
+          {
+            ++iter;
+          }
+        }
+      }
+      // place the packet in the receiving buffer
+      rcvbuf.bufcontent.push_back(received_pkt);
+      rcvbuf.len += ntohl(received_pkt.length);
+      // do a linear scan in the receiving buffer starting with the next SEQ number
+      for (list<packet>::iterator iter = rcvbuf.bufcontent.begin(); iter != rcvbuf.bufcontent.end(); )
+      {
+        // writebuflen = 0;
+        if(ack == ntohl(iter->seq)) // if what we found is what we want // we increment ack only when we pop
+        {
+          uint16_t payload_size = ntohs(iter->length);
+          ack += payload_size; // increment by the payload length
+          // instead of putting things in writebuf, just write to STDOUT directly
+          write(STDOUT_FILENO, iter->payload, payload_size);
+          fprintf(stderr, "ack number is now %d -- server\n", ack);
+
+          // OUTDATED: delete after code completion
+          // uint8_t* payload = iter->payload;
+          // int length = ntohs(iter->length);
+          // memcpy(payload, &writebuf[writebuflen], length);
+          // writebuflen += length;
+          rcvbuf.len -= payload_size;
+          iter = rcvbuf.bufcontent.erase(iter);
+        }
+        else if(ack > ntohl(iter->seq)) 
+        // if ACK we are looking for is greater than what we have in the receiving buffer
+        // that packet must have already been received; in other words, this is a duplicate packet
+        {
+          iter = rcvbuf.bufcontent.erase(iter);
+        }
+        else
+        {
+          ++iter;
+        }
+      }
+      // Data available to write
+      // OUTDATED: delete after code completion
+      // if (writebuflen > 0) {
+      //   write(STDOUT_FILENO, writebuf, writebuflen);
+      // }
     }
+
+
+    // part 2. send logic
+    // after the linear scan, set the next ACK number
+    // we want the next in-order packet number
+    // The logic is already handled previously as we increment ack
 
     // Read from stdin
     bytes_read = read(STDIN_FILENO, &buffer, sizeof(buffer));
 
     // Data available to send from stdin
-    if (bytes_read > 0) {
-      sendto(sockfd, &buffer, bytes_read, 0, (struct sockaddr *)&client_addr,
+    // Keep sending as long as the sending buffer has space
+    if (bytes_read > 0 && sndbuf.len <= MAX_WINDOW) {
+      // 1. place it in a new packet's payload
+      sending_pkt = { 
+        .ack = htonl(ack),
+        .seq = htonl(server_seq), 
+        .length = htons(bytes_read),
+        .flags = 0b10, // only ACK flag set
+        .unused = 0
+      };
+      memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer element
+      server_seq += bytes_read; // increment by payload length
+      // 2. send the packet AND keep it in the sending buffer
+      sndbuf.bufcontent.push_back(sending_pkt);
+      sndbuf.len += bytes_read;
+      print_diag(&sending_pkt, SEND);
+      sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
+             sizeof(struct sockaddr_in));
+    }
+    else if(sndbuf.len >= MAX_WINDOW) // EOF or max window reached
+    {
+      // send a dedicated ACK packet
+      fprintf(stderr, "send dedicated ACK packet -- server\n");
+      sending_pkt = { 
+        .ack = htonl(ack),
+        .seq = htonl(server_seq), 
+        .length = 0,
+        .flags = 0b10, // only ACK 
+        .unused = 0
+      };
+      memset(sending_pkt.payload, 0, MSS); // reset to 0
+      // directly send ACK packet and don't put in the sendbuffer
+      print_diag(&sending_pkt, SEND);
+      sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
              sizeof(struct sockaddr_in));
     }
     end_clock = clock(); 
     
+
+    // part 3. retransmit logic
+    // also incorporated in send logic
     // at the end of each loop, check if there are any ACKs
     // if there was none for 1s, retransmit packet with lowest sequence number
     if( ((double)(end_clock-start_clock)/CLOCKS_PER_SEC) >= 1.0) 
     {
-      if (!ack_recvd)
+      if(!ack_recvd && !sndbuf.bufcontent.empty())
       {
         // resend the packet with lowest sequence number
+        sending_pkt = sndbuf.bufcontent.front();
+        fprintf(stderr, "Retransmitted: 1 second timeout -- server\n");
+        print_diag(&sending_pkt, SEND);
+        sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
+             sizeof(struct sockaddr_in));
+        start_clock = end_clock = clock();
       }
     } 
+    else // if(ack_recvd || sndbuf.bufcontent.empty()) // reset the timer if we receive a new ACK or sending buffer is empty
+    {
+      start_clock = end_clock = clock();
+    }
   }
 
   return 0;
