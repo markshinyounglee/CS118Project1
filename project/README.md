@@ -34,5 +34,11 @@ then we know that we have reached the end of the program. That is when we can st
 
 After the handshake step, the client and server share the same logic in the while loop since both are symmetrical.
 
+When we copy the while loop over, three things to keep in mind:
+- for all the debugging information, change "server" <-> "client
+- change sequence number variable: server_seq <-> client.seq
+- change target address variable: server_addr <-> client_addr
+
+
 
 

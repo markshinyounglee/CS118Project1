@@ -8,6 +8,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <list>
 #include <cstring>
 #include <climits>
@@ -403,6 +405,7 @@ int main(int argc, char **argv) {
     } 
   }
 
+  close(sockfd);
   return 0;
 }
 
