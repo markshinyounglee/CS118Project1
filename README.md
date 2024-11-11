@@ -120,12 +120,12 @@ Debugging was particularly challenging because both client and server were concu
 
 I have attached the pictures for all three in order:
 1. my server <-> my client (1st iteration)
-![my server <-> my client](serverclient1.jpg)
+![my server <-> my client](images/serverclient1.jpg)
 
 2. my server <-> my client (2nd iteration)
-![my server <-> my client](serverclient2.jpg)
+![my server <-> my client](images/serverclient2.jpg)
 
 3. refserver <-> refclient  
-![refserver <-> refclient](refserverclient.jpg)
+![refserver <-> refclient](images/refserverclient.jpg)
 
 

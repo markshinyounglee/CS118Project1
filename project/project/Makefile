@@ -15,5 +15,5 @@ clean:
 zip: clean
 	rm -f project.zip
 	mkdir -p project
-	cp README.md diagnostics.h server.cpp client.cpp Makefile project
+	cp ../README.md diagnostics.h server.cpp client.cpp Makefile project
 	zip project1.zip project/*

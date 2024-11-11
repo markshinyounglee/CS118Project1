@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -44,13 +45,14 @@ typedef struct { // sliding window
 ntbuf sndbuf; // restricted to 20240 bytes
 ntbuf rcvbuf; // resizable
 
+int tempcounter = 0;
 
 void retransmit_packet(int);
 void print_rcvbuf();
 void print_sndbuf();
 int main(int argc, char **argv) {
   if (argc < 3) {
-    fprintf(stderr, "Usage: client <hostname> <port> \n");
+    //# fprintf(stderr, "Usage: client <hostname> <port> \n");
     exit(1);
   }
 
@@ -148,7 +150,7 @@ int main(int argc, char **argv) {
   //# print_diag(&sending_pkt, SEND);
   sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, 
       (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in)); // assume sendto always succeeds
-  fprintf(stderr, "handshake complete - client\n");
+  //# fprintf(stderr, "handshake complete - client\n");
   // exit(1);
 
   // 2. Handshake complete. Start sending real data
@@ -186,7 +188,11 @@ int main(int argc, char **argv) {
           {
             // we know there is nothing more to retransmit (i.e., the recipient received all the packets)
             // in this case, keep waiting because we might still be waiting for more packets
-            //# fprintf(stderr, "timeout but nothing to send\n");
+            //# if(tempcounter < 7)
+            //# {
+            //#   fprintf(stderr, "timeout but nothing to send\n");
+            //#   tempcounter++;
+            //# }    
           }
         }
     }

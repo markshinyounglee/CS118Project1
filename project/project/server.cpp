@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-#include <unistd.h>
 #include <time.h>
+#include <unistd.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <list>
@@ -41,6 +41,8 @@ typedef struct { // sliding window
   list<packet> bufcontent; // payload length should be 20240
   uint32_t len; // check the length to be less than MAX_WINDOW
 } ntbuf;
+
+int tempcounter = 0;
 
 ntbuf sndbuf; // restricted to 20240 bytes
 ntbuf rcvbuf; // resizable
@@ -125,7 +127,7 @@ int main(int argc, char **argv) {
       continue;
     client_connected = 1; // At this point, the client has connected and sent data
     ack = ntohl(received_pkt.seq)+1;
-    print_diag(&received_pkt, RECV);
+    //# print_diag(&received_pkt, RECV);
     break;
   }
   // phase 2:
@@ -141,7 +143,7 @@ int main(int argc, char **argv) {
   memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer
   server_seq++; // increment sequence number after transmission
   sndbuf.bufcontent.push_back(sending_pkt);
-  print_diag(&sending_pkt, SEND);
+  //# print_diag(&sending_pkt, SEND);
   sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, 
       (struct sockaddr *)&client_addr, sizeof(struct sockaddr_in));
 
@@ -162,7 +164,7 @@ int main(int argc, char **argv) {
       ack = ntohl(received_pkt.seq) + 1;
       fprintf(stderr, "case 2 -- server\n");
     }
-    print_diag(&received_pkt, RECV);
+    //# print_diag(&received_pkt, RECV);
 
     // remove all packets smaller than ACK in sndbuf
     for (list<packet>::iterator iter = sndbuf.bufcontent.begin(); iter != sndbuf.bufcontent.end(); )
@@ -227,7 +229,13 @@ int main(int argc, char **argv) {
           }
           else
           {
-            fprintf(stderr, "timeout but nothing to send\n");
+            // we know there is nothing more to retransmit (i.e., the recipient received all the packets)
+            // in this case, keep waiting because we might still be waiting for more packets
+            //# if(tempcounter < 7)
+            //# {
+            //#   fprintf(stderr, "timeout but nothing to send\n");
+            //#   tempcounter++;
+            //# } 
           }
         }
     }
