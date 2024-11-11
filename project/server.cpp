@@ -143,14 +143,12 @@ int main(int argc, char **argv) {
     uint16_t payload_size = ntohs(received_pkt.length);
     if (payload_size >= 1) {
       ack = ntohl(received_pkt.seq) + payload_size;
-      fprintf(stderr, "ack number is now %d -- server\n", ack);
       write(STDOUT_FILENO, received_pkt.payload, payload_size);
       fprintf(stderr, "case 1 -- server\n");
     }
     else
     {
       ack = ntohl(received_pkt.seq) + 1;
-      fprintf(stderr, "ack number is now %d -- server\n", ack);
       fprintf(stderr, "case 2 -- server\n");
     }
     print_diag(&received_pkt, RECV);
@@ -254,6 +252,8 @@ int main(int argc, char **argv) {
         // if ACK we are looking for is greater than what we have in the receiving buffer
         // that packet must have already been received; in other words, this is a duplicate packet
         {
+          uint16_t payload_size = ntohs(iter->length);
+          rcvbuf.len -= payload_size;
           iter = rcvbuf.bufcontent.erase(iter);
         }
         else
@@ -275,7 +275,18 @@ int main(int argc, char **argv) {
     // The logic is already handled previously as we increment ack
 
     // Read from stdin
-    bytes_read = read(STDIN_FILENO, &buffer, sizeof(buffer));
+    // the amount depends on how much space there is left in sndbuf
+    uint32_t read_size = 0;
+    if (MSS > (MAX_WINDOW - sndbuf.len))
+    {
+      read_size = MAX_WINDOW - sndbuf.len;
+    }
+    else
+    {
+      read_size = MSS;
+    }
+    memset(buffer, 0, MSS);
+    bytes_read = read(STDIN_FILENO, &buffer, read_size);
 
     // Data available to send from stdin
     // Keep sending as long as the sending buffer has space

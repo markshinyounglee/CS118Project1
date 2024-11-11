@@ -15,6 +15,8 @@
 #define MAX_WINDOW 20240
 #define MAX_DELAY_HOLD 3
 
+uint32_t client_packet_num = 0; // delete after use
+
 // uncomment before submission
 /*
 #define MSS 1012 // MSS = Maximum Segment Size (aka max length)
@@ -105,7 +107,8 @@ int main(int argc, char **argv) {
 	  .seq = htonl(client_seq), 
 	  .length = 0,
 	  .flags = 1, // only SYNC 
-	  .unused = 0
+	  .unused = 0,
+    .packet_num = 0 // delete after use
   };
   memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer element
   client_seq++; // increment
@@ -116,6 +119,7 @@ int main(int argc, char **argv) {
   while(recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
                            (struct sockaddr*)&server_addr, &s) <= 0);
   ack = ntohl(received_pkt.seq)+1; // handshake has zero payload
+  client_packet_num = ntohl(received_pkt.packet_num) + 1; // delete after use
   print_diag(&received_pkt, RECV);
   // phase 3: send a final packet to the server
   /*
@@ -129,7 +133,8 @@ int main(int argc, char **argv) {
 	  .seq = htonl(client_seq),
 	  .length = 0,
 	  .flags = 0b10, // only ACK
-	  .unused = 0
+	  .unused = 0,
+    .packet_num = htonl(client_packet_num) // delete after use
   };
   // memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer
   client_seq++;
@@ -158,6 +163,7 @@ int main(int argc, char **argv) {
     if(bytes_recvd > 0)
     {
       print_diag(&received_pkt, RECV);
+      client_packet_num = ntohl(received_pkt.packet_num) + 1; // delete after use
       ack_recvd = (received_pkt.flags >> 1) & 1;
       // if the ACK flag is set, scan the sndbuf and remove all packets with sequence number less than ACK number
       if (ack_recvd) // if the ACK flag is set
@@ -212,11 +218,6 @@ int main(int argc, char **argv) {
           write(STDOUT_FILENO, iter->payload, payload_size);
           fprintf(stderr, "ack number is now %d -- client\n", ack);
 
-          // OUTDATED: delete after code completion
-          // uint8_t* payload = iter->payload;
-          // int length = ntohs(iter->length);
-          // memcpy(payload, &writebuf[writebuflen], length);
-          // writebuflen += length;
           rcvbuf.len -= payload_size;
           iter = rcvbuf.bufcontent.erase(iter);
         }
@@ -224,6 +225,8 @@ int main(int argc, char **argv) {
         // if ACK we are looking for is greater than what we have in the receiving buffer
         // that packet must have already been received; in other words, this is a duplicate packet
         {
+          uint16_t payload_size = ntohs(iter->length);
+          rcvbuf.len -= payload_size;
           iter = rcvbuf.bufcontent.erase(iter);
         }
         else
@@ -245,7 +248,18 @@ int main(int argc, char **argv) {
     // The logic is already handled previously as we increment ack
 
     // Read from stdin
-    bytes_read = read(STDIN_FILENO, &buffer, sizeof(buffer));
+    // the amount depends on how much space there is left in sndbuf
+    uint32_t read_size = 0;
+    if (MSS > (MAX_WINDOW - sndbuf.len))
+    {
+      read_size = MAX_WINDOW - sndbuf.len;
+    }
+    else
+    {
+      read_size = MSS;
+    }
+    memset(buffer, 0, MSS);
+    bytes_read = read(STDIN_FILENO, &buffer, read_size);
 
     // Data available to send from stdin
     // Keep sending as long as the sending buffer has space
@@ -256,7 +270,8 @@ int main(int argc, char **argv) {
         .seq = htonl(client_seq), 
         .length = htons(bytes_read),
         .flags = 0b10, // only ACK flag set
-        .unused = 0
+        .unused = 0,
+        .packet_num = htonl(client_packet_num) // delete after use
       };
       memcpy(sending_pkt.payload, buffer, MSS); // copy the buffer element
       client_seq += bytes_read; // increment by payload length

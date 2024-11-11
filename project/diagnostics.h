@@ -15,6 +15,7 @@ typedef struct {
 	uint8_t flags;
 	uint8_t unused;
 	uint8_t payload[MSS];
+    uint32_t packet_num; // absolute value that keeps incrementing // delete after use
 } packet;
 
 static inline void print_diag(packet* pkt, int diag) {
@@ -47,6 +48,7 @@ static inline void print_diag(packet* pkt, int diag) {
             fprintf(stderr, "ACK ");
         }
     }
+    fprintf(stderr, " -- packet number: %u", ntohl(pkt->packet_num)); // delete after use
     fprintf(stderr, "\n");
 }
 
