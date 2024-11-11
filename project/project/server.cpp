@@ -8,6 +8,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <list>
 #include <cstring>
 #include <climits>
@@ -15,6 +17,10 @@
 
 #define MAX_WINDOW 20240
 #define MAX_DELAY_HOLD 3
+#define TIMEOUT_INTVL 1
+
+uint32_t client_packet_num = 0; // delete after use
+volatile sig_atomic_t retransmit_flag = false; // used for retransmission timer
 
 // uncomment before submission
 /*
@@ -39,12 +45,11 @@ typedef struct { // sliding window
 ntbuf sndbuf; // restricted to 20240 bytes
 ntbuf rcvbuf; // resizable
 
-clock_t start_clock = 0, end_clock = 0; // keep track of time elapsed
-
 // for sending buffer, use resizable array (linked list)
 // while ensuring that the sum of payloads stay within 20240 bytes
 // for receiving buffer, receive as much as you want
 
+void retransmit_packet(int);
 void print_rcvbuf();
 void print_sndbuf();
 int main(int argc, char **argv) {
@@ -197,19 +202,43 @@ int main(int argc, char **argv) {
   // before processing to ensure FIFO delivery (CS 134)
   // retransmit only when 1) there are 3 duplicate ACKs or 2) 1 second of no ACK
   while (1) {
-    start_clock = ack_recvd ? clock() : start_clock;  // reset start iff ack is received
-    
     // part 1. receive logic
     // Receive from socket
-    bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
-                               (struct sockaddr *)&client_addr, &s);
+    alarm(TIMEOUT_INTVL);  // set alarm for 1s timeout
+    while((bytes_recvd = recvfrom(sockfd, &received_pkt, sizeof(received_pkt), 0,
+                               (struct sockaddr *)&client_addr, &s)) <= 0) // retransmission logic
+    {
+      RETRANSMIT:
+        signal(SIGALRM, retransmit_packet);
+        if (retransmit_flag == true)
+        {
+          if (!sndbuf.bufcontent.empty())
+          {
+            // resend the packet with lowest sequence number
+            sending_pkt = sndbuf.bufcontent.front();
+            // modify the ACK to reflect what we want 
+            sending_pkt.ack = ntohl(ack);
+            //# fprintf(stderr, "Retransmitted: 1 second timeout -- server\n");
+            //# print_diag(&sending_pkt, SEND);
+            sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
+                sizeof(struct sockaddr_in));
+            retransmit_flag = false;
+            alarm(TIMEOUT_INTVL); // reset the alarm
+          }
+          else
+          {
+            fprintf(stderr, "timeout but nothing to send\n");
+          }
+        }
+    }
     if(bytes_recvd > 0)
     {
-      print_diag(&received_pkt, RECV);
+      //# print_diag(&received_pkt, RECV);
       ack_recvd = (received_pkt.flags >> 1) & 1;
       // if the ACK flag is set, scan the sndbuf and remove all packets with sequence number less than ACK number
       if (ack_recvd) // if the ACK flag is set
       {
+        alarm(0); // cancel pending alarm
         received_ack = ntohl(received_pkt.ack); // dealing with received packets
 
         // if there are 3 duplicate acks, you should retransmit
@@ -217,21 +246,21 @@ int main(int argc, char **argv) {
         if (received_ack == prev_ack)
         {
           ack_counter++;
-          fprintf(stderr, "ack_counter: %d\n", ack_counter);
-          print_rcvbuf();
+          //# fprintf(stderr, "ack_counter: %d\n", ack_counter);
+          //# print_rcvbuf();
         }
         else
         {
           ack_counter = 1;
-          fprintf(stderr, "ack_counter: %d\n", ack_counter);
-          print_rcvbuf();
+          //# fprintf(stderr, "ack_counter: %d\n", ack_counter);
+          //# print_rcvbuf();
         }
         if (ack_counter >= MAX_DELAY_HOLD) 
         {
           sending_pkt = sndbuf.bufcontent.front();
           sending_pkt.ack = htonl(ack); // modify the ACK for retransmission
-          fprintf(stderr, "Retransmitted: 3 duplicate ACKs -- server\n");
-          print_diag(&sending_pkt, SEND);
+          //# fprintf(stderr, "Retransmitted: 3 duplicate ACKs -- server\n");
+          //# print_diag(&sending_pkt, SEND);
           sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
                 sizeof(struct sockaddr_in));
           ack_counter = 0;
@@ -245,9 +274,9 @@ int main(int argc, char **argv) {
           {
             sndbuf.len -= ntohs(iter->length);
             iter = sndbuf.bufcontent.erase(iter);
-            fprintf(stderr, "send buffer popped -- server\n");
-            fprintf(stderr, "remaining length: %d\n", sndbuf.len);
-            print_sndbuf();
+            //# fprintf(stderr, "send buffer popped -- server\n");
+            //# fprintf(stderr, "remaining length: %d\n", sndbuf.len);
+            //# print_sndbuf();
           }
           else
           {
@@ -258,12 +287,6 @@ int main(int argc, char **argv) {
         // place the packet in the receiving buffer
         // condition: rcvbuf is not full and there are no duplicates
         // because of sliding window
-        if(MAX_WINDOW - rcvbuf.len >= ntohs(received_pkt.length))
-        {
-          rcvbuf.bufcontent.push_back(received_pkt);
-          rcvbuf.len += ntohs(received_pkt.length);
-        }
-        /*
         if(MAX_WINDOW - rcvbuf.len >= ntohs(received_pkt.length))
         {
           bool isdup = false;
@@ -281,16 +304,15 @@ int main(int argc, char **argv) {
             rcvbuf.len += ntohs(received_pkt.length);
           }
         }
-        */
+      }
+      else // if ACK is not set
+      {
+        goto RETRANSMIT;
       }
     }
-    else
-    {
-      ack_recvd = false;
-    }
     
-    // do this concurrently with writes and reads
     // do a linear scan in the receiving buffer starting with the next SEQ number
+    // do this concurrently with writes and reads
     for (list<packet>::iterator iter = rcvbuf.bufcontent.begin(); iter != rcvbuf.bufcontent.end(); )
     {
       // writebuflen = 0;
@@ -300,7 +322,7 @@ int main(int argc, char **argv) {
         ack += payload_size; // increment by the payload length
         // instead of putting things in writebuf, just write to STDOUT directly
         write(STDOUT_FILENO, iter->payload, payload_size);
-        fprintf(stderr, "ack number is now %d -- server\n", ack);
+        //# fprintf(stderr, "ack number is now %d -- server\n", ack);
         rcvbuf.len -= payload_size;
         iter = rcvbuf.bufcontent.erase(iter);
       }
@@ -354,14 +376,14 @@ int main(int argc, char **argv) {
       // 2. send the packet AND keep it in the sending buffer
       sndbuf.bufcontent.push_back(sending_pkt);
       sndbuf.len += bytes_read;
-      print_diag(&sending_pkt, SEND);
+      //# print_diag(&sending_pkt, SEND);
       sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
              sizeof(struct sockaddr_in));
     }
     else if( (bytes_read == 0 && !rcvbuf.bufcontent.empty()) || sndbuf.len >= MAX_WINDOW) // EOF or max window reached
     {
       // send a dedicated ACK packet
-      fprintf(stderr, "send dedicated ACK packet -- server\n");
+      //# fprintf(stderr, "send dedicated ACK packet -- server\n");
       sending_pkt = { 
         .ack = htonl(ack),
         .seq = 0, 
@@ -371,41 +393,21 @@ int main(int argc, char **argv) {
       };
       memset(sending_pkt.payload, 0, MSS); // reset to 0
       // directly send ACK packet and don't put in the sendbuffer
-      print_diag(&sending_pkt, SEND);
+      //# print_diag(&sending_pkt, SEND);
       sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
              sizeof(struct sockaddr_in));
     }
-    end_clock = clock(); 
-    
-
-    // part 3. retransmit logic
-    // also incorporated in send logic
-    // at the end of each loop, check if there are any ACKs
-    // if there was none for 1s, retransmit packet with lowest sequence number
-    if( ((double)(end_clock-start_clock)/CLOCKS_PER_SEC) >= 1.0) 
-    {
-      if(!ack_recvd && !sndbuf.bufcontent.empty())
-      {
-        // resend the packet with lowest sequence number
-        sending_pkt = sndbuf.bufcontent.front();
-        // modify the ACK to reflect what we want 
-        sending_pkt.ack = ntohl(ack);
-        fprintf(stderr, "Retransmitted: 1 second timeout -- server\n");
-        print_diag(&sending_pkt, SEND);
-        sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
-             sizeof(struct sockaddr_in));
-        start_clock = end_clock = clock();
-      }
-      else // if(ack_recvd || sndbuf.bufcontent.empty()) // reset the timer if we receive a new ACK or sending buffer is empty
-      {
-        start_clock = end_clock = clock();
-      }
-    } 
   }
 
+  close(sockfd);
   return 0;
 }
 
+
+void retransmit_packet(int sig)
+{
+  retransmit_flag = true;
+}
 void print_rcvbuf()
 {
   fprintf(stderr, "server receiving buffer: ");
