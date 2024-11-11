@@ -45,6 +45,8 @@ clock_t start_clock = 0, end_clock = 0; // keep track of time elapsed
 // while ensuring that the sum of payloads stay within 20240 bytes
 // for receiving buffer, receive as much as you want
 
+void print_rcvbuf();
+void print_sndbuf();
 int main(int argc, char **argv) {
   if (argc < 2) {
     fprintf(stderr, "Usage: server <port>\n");
@@ -104,6 +106,9 @@ int main(int argc, char **argv) {
   int bytes_read = 0;
   int bytes_recvd = 0;
   int ack_counter = 1; 
+  uint32_t prev_ack = 0; // keep track of same acks
+  uint32_t received_ack; // ACK received from the latest packet
+  
   
   // Assume the socket has been set up with all other variables
   // phase 1: receive SYN packet from client
@@ -190,15 +195,22 @@ int main(int argc, char **argv) {
       // if the ACK flag is set, scan the sndbuf and remove all packets with sequence number less than ACK number
       if (ack_recvd) // if the ACK flag is set
       {
-        uint32_t received_ack = ntohl(received_pkt.ack); // dealing with received packets
-        uint32_t prev_ack = ntohl(rcvbuf.bufcontent.back().ack);
+        received_ack = ntohl(received_pkt.ack); // dealing with received packets
 
         // if there are 3 duplicate acks, you should retransmit
         // if 3 duplicate ACKs, resend the packet with the lowest sequence number
         if (received_ack == prev_ack)
+        {
           ack_counter++;
+          fprintf(stderr, "ack_counter: %d\n", ack_counter);
+          print_rcvbuf();
+        }
         else
+        {
           ack_counter = 1;
+          fprintf(stderr, "ack_counter: %d\n", ack_counter);
+          print_rcvbuf();
+        }
         if (ack_counter >= MAX_DELAY_HOLD) 
         {
           sending_pkt = sndbuf.bufcontent.front();
@@ -208,6 +220,7 @@ int main(int argc, char **argv) {
                 sizeof(struct sockaddr_in));
           ack_counter = 0;
         }
+        prev_ack = received_ack;
 
         // do linear scan for send buffer
         for (list<packet>::iterator iter = sndbuf.bufcontent.begin(); iter != sndbuf.bufcontent.end(); )
@@ -218,54 +231,64 @@ int main(int argc, char **argv) {
             iter = sndbuf.bufcontent.erase(iter);
             fprintf(stderr, "send buffer popped -- server\n");
             fprintf(stderr, "remaining length: %d\n", sndbuf.len);
+            print_sndbuf();
           }
           else
           {
             ++iter;
           }
         }
-      }
-      // place the packet in the receiving buffer
-      rcvbuf.bufcontent.push_back(received_pkt);
-      rcvbuf.len += ntohs(received_pkt.length);
-      // do a linear scan in the receiving buffer starting with the next SEQ number
-      for (list<packet>::iterator iter = rcvbuf.bufcontent.begin(); iter != rcvbuf.bufcontent.end(); )
-      {
-        // writebuflen = 0;
-        if(ack == ntohl(iter->seq)) // if what we found is what we want // we increment ack only when we pop
-        {
-          uint16_t payload_size = ntohs(iter->length);
-          ack += payload_size; // increment by the payload length
-          // instead of putting things in writebuf, just write to STDOUT directly
-          write(STDOUT_FILENO, iter->payload, payload_size);
-          fprintf(stderr, "ack number is now %d -- server\n", ack);
 
-          // OUTDATED: delete after code completion
-          // uint8_t* payload = iter->payload;
-          // int length = ntohs(iter->length);
-          // memcpy(payload, &writebuf[writebuflen], length);
-          // writebuflen += length;
-          rcvbuf.len -= payload_size;
-          iter = rcvbuf.bufcontent.erase(iter);
-        }
-        else if(ack > ntohl(iter->seq)) 
-        // if ACK we are looking for is greater than what we have in the receiving buffer
-        // that packet must have already been received; in other words, this is a duplicate packet
+        // place the packet in the receiving buffer
+        // condition: rcvbuf is not full and there are no duplicates
+        // this is always satisfied because of sliding window
+        if(MAX_WINDOW - rcvbuf.len >= ntohs(received_pkt.length))
         {
-          uint16_t payload_size = ntohs(iter->length);
-          rcvbuf.len -= payload_size;
-          iter = rcvbuf.bufcontent.erase(iter);
-        }
-        else
-        {
-          ++iter;
+          bool isdup = false;
+          for (list<packet>::iterator iter = rcvbuf.bufcontent.begin(); iter != rcvbuf.bufcontent.end(); ++iter)
+          {
+            if (iter->seq == received_pkt.seq)
+            {
+              isdup = true;
+              break;
+            }
+          }
+          if(!isdup)
+          {
+            rcvbuf.bufcontent.push_back(received_pkt);
+            rcvbuf.len += ntohs(received_pkt.length);
+          }
         }
       }
-      // Data available to write
-      // OUTDATED: delete after code completion
-      // if (writebuflen > 0) {
-      //   write(STDOUT_FILENO, writebuf, writebuflen);
-      // }
+    }
+    
+    // do this concurrently with writes and reads
+    // do a linear scan in the receiving buffer starting with the next SEQ number
+    for (list<packet>::iterator iter = rcvbuf.bufcontent.begin(); iter != rcvbuf.bufcontent.end(); )
+    {
+      // writebuflen = 0;
+      if(ack == ntohl(iter->seq)) // if what we found is what we want // we increment ack only when we pop
+      {
+        uint16_t payload_size = ntohs(iter->length);
+        ack += payload_size; // increment by the payload length
+        // instead of putting things in writebuf, just write to STDOUT directly
+        write(STDOUT_FILENO, iter->payload, payload_size);
+        fprintf(stderr, "ack number is now %d -- server\n", ack);
+        rcvbuf.len -= payload_size;
+        iter = rcvbuf.bufcontent.erase(iter);
+      }
+      else if(ack > ntohl(iter->seq)) 
+      // if ACK we are looking for is greater than what we have in the receiving buffer
+      // that packet must have already been received; in other words, this is a duplicate packet
+      {
+        uint16_t payload_size = ntohs(iter->length);
+        rcvbuf.len -= payload_size;
+        iter = rcvbuf.bufcontent.erase(iter);
+      }
+      else
+      {
+        ++iter;
+      }
     }
 
 
@@ -308,7 +331,7 @@ int main(int argc, char **argv) {
       sendto(sockfd, &sending_pkt, sizeof(sending_pkt), 0, (struct sockaddr *)&client_addr,
              sizeof(struct sockaddr_in));
     }
-    else if(sndbuf.len >= MAX_WINDOW) // EOF or max window reached
+    else if(bytes_read == 0 || sndbuf.len >= MAX_WINDOW) // EOF or max window reached
     {
       // send a dedicated ACK packet
       fprintf(stderr, "send dedicated ACK packet -- server\n");
@@ -352,4 +375,23 @@ int main(int argc, char **argv) {
   }
 
   return 0;
+}
+
+void print_rcvbuf()
+{
+  fprintf(stderr, "server receiving buffer: ");
+  for (list<packet>::iterator iter = rcvbuf.bufcontent.begin(); iter != rcvbuf.bufcontent.end(); ++iter)
+  {
+    fprintf(stderr, "%d -- ", ntohl(iter->seq));
+  }
+  fprintf(stderr, "\n");
+}
+void print_sndbuf()
+{
+  fprintf(stderr, "server sending buffer: ");
+  for (list<packet>::iterator iter = sndbuf.bufcontent.begin(); iter != sndbuf.bufcontent.end(); ++iter)
+  {
+    fprintf(stderr, "%d -- ", ntohl(iter->seq));
+  }
+  fprintf(stderr, "\n");
 }
